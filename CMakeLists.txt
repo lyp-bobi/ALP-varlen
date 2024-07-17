@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_CXX_STANDARD 17)
 project(ALP)
 
+add_subdirectory(simpleffor)
+
 add_compile_options(-fPIC)
 
 # Options : ------------------------------------------------------------------------------------------------------------
@@ -76,3 +78,6 @@ if (ALP_BUILD_BENCHMARKING)
     include_directories(${CMAKE_SOURCE_DIR}/data/include)
     add_subdirectory(benchmarks)
 endif ()
+
+INSTALL(TARGETS ${CMAKE_PROJECT_NAME} LIBRARY DESTINATION lib)
+INSTALL(FILES include/alp.hpp DESTINATION include)

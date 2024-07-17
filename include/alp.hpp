@@ -15,4 +15,7 @@
 #include "fastlanes/ffor.hpp"
 #include "fastlanes/unffor.hpp"
 
+#include "alp/compressor_varlen.hpp"
+#include "alp/decompressor_varlen.hpp"
+
 #endif // ALP_ALP_HPP
