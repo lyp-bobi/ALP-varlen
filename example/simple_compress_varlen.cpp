@@ -3,7 +3,8 @@
 #include <cassert>
 
 int main() {
-	size_t tuples_count = 23;
+	srand((unsigned int)time(NULL));
+	size_t tuples_count = rand()*rand()%8092;
 	size_t out_buffer_size =
 	    (tuples_count * sizeof(double)) + 8096; // We leave some headroom in case of negative compression
 	size_t uncompressed_size = tuples_count * sizeof(double);
@@ -20,6 +21,7 @@ int main() {
 	compressor.compress(in, tuples_count, out);
 	size_t compressed_size   = compressor.get_size();
 	double compression_ratio = (double)uncompressed_size / compressed_size;
+	printf("Tuples count: %zu\n", tuples_count);
 	printf("Uncompressed size (in bytes): %zu\n", uncompressed_size);
 	printf("Compressed size (in bytes): %zu\n", compressed_size);
 	printf("Compression Ratio: %f\n\n", compression_ratio);

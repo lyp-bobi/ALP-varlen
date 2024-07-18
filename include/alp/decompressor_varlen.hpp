@@ -5,6 +5,7 @@
 #include "alp/storer.hpp"
 #include "alp/utils.hpp"
 #include "fastlanes/unffor.hpp"
+#include "config_varlen.hpp"
 #include "../../simpleffor/include/turbocompression.h"
 
 namespace alp {
@@ -43,6 +44,8 @@ struct AlpDecompressor_varlen {
 
 	};
 
+	size_t get_size() { return reader.get_size(); }
+
 	void load_rd_metadata() {
 		reader.read(&stt.right_bit_width, sizeof(stt.right_bit_width));
 		reader.read(&stt.left_bit_width, sizeof(stt.left_bit_width));
@@ -69,13 +72,22 @@ struct AlpDecompressor_varlen {
 		reader.read(&stt.exp, sizeof(stt.exp));
 		reader.read(&stt.fac, sizeof(stt.fac));
 		reader.read(&stt.exceptions_count, sizeof(stt.exceptions_count));
-		reader.read(&stt.for_base, sizeof(stt.for_base));
-		reader.read(&stt.bit_width, sizeof(stt.bit_width));
-
-		if (stt.bit_width > 0) {
-			alp_bp_size = AlpApiUtils<T>::get_size_after_bitpacking(stt.bit_width);
-			reader.read(alp_encoded_array, alp_bp_size);
+		if (stt.vector_size < config::VECTOR_NO_COMPRESS_SIZE)
+		{
+			alp_bp_size = stt.vector_size * sizeof(uint64_t);
 		}
+		else if(stt.vector_size < config::VECTOR_NOFILLING_SIZE)
+		{
+			reader.read(&alp_bp_size, sizeof(alp_bp_size));
+		}
+		else {
+
+			reader.read(&stt.for_base, sizeof(stt.for_base));
+			reader.read(&stt.bit_width, sizeof(stt.bit_width));
+			alp_bp_size = AlpApiUtils<T>::get_size_after_bitpacking(stt.bit_width);
+		}
+
+		reader.read(alp_encoded_array, alp_bp_size);
 
 		if (stt.exceptions_count > 0) {
 			reader.read(exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
@@ -95,7 +107,12 @@ struct AlpDecompressor_varlen {
 			                 &stt.exceptions_count,
 			                 stt);
 		} else {
-			if (stt.vector_size < 512) {
+			if (stt.vector_size < config::VECTOR_NO_COMPRESS_SIZE)
+			{
+				memcpy(encoded_integers, alp_encoded_array, alp_bp_size);
+			}
+			else if(stt.vector_size < config::VECTOR_NOFILLING_SIZE)
+			{
 				uint32_t size;
 				turbouncompress64(reinterpret_cast<const uint8_t*>(alp_encoded_array),
 				                  reinterpret_cast<uint64_t*>(encoded_integers), size);
@@ -103,6 +120,7 @@ struct AlpDecompressor_varlen {
 			else {
 				unffor::unffor(alp_encoded_array, encoded_integers, stt.bit_width, &stt.for_base);
 			}
+
 			AlpDecode<T>::decode(encoded_integers, stt.fac, stt.exp, (out + out_offset));
 			AlpDecode<T>::patch_exceptions(
 			    (out + out_offset), exceptions, exceptions_position, &stt.exceptions_count);

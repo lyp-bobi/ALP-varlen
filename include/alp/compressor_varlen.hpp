@@ -7,6 +7,7 @@
 #include "alp/storer.hpp"
 #include "alp/utils.hpp"
 #include "fastlanes/ffor.hpp"
+#include "config_varlen.hpp"
 #include "../../simpleffor/include/turbocompression.h"
 
 namespace alp {
@@ -60,13 +61,19 @@ struct AlpCompressor_varlen {
 	void compress_alp_vector() {
 		AlpEncode<T>::encode(
 		    input_vector, exceptions, exceptions_position, &stt.exceptions_count, encoded_integers, stt);
-		AlpEncode<T>::analyze_ffor(encoded_integers, stt.bit_width, &stt.for_base);
-		if (stt.vector_size < 512)
+
+		if (stt.vector_size < config::VECTOR_NO_COMPRESS_SIZE)
+		{
+			alp_bp_size = sizeof(uint64_t) * stt.vector_size;
+			memcpy(alp_encoded_array, encoded_integers, alp_bp_size);
+		}
+		else if(stt.vector_size < config::VECTOR_NOFILLING_SIZE)
 		{
 			uint8_t *end = turbocompress64(reinterpret_cast<const uint64_t*>(encoded_integers), stt.vector_size, reinterpret_cast<uint8_t*>(alp_encoded_array));
 			alp_bp_size = end - (uint8_t *)alp_encoded_array;
 		}
 		else {
+			AlpEncode<T>::analyze_ffor(encoded_integers, stt.bit_width, &stt.for_base);
 			ffor::ffor(encoded_integers, alp_encoded_array, stt.bit_width, &stt.for_base);
 			alp_bp_size = AlpApiUtils<T>::get_size_after_bitpacking(stt.bit_width);
 		}
@@ -180,8 +187,18 @@ struct AlpCompressor_varlen {
 		storer.store((void*)&stt.exp, sizeof(stt.exp));
 		storer.store((void*)&stt.fac, sizeof(stt.fac));
 		storer.store((void*)&stt.exceptions_count, sizeof(stt.exceptions_count));
-		storer.store((void*)&stt.for_base, sizeof(stt.for_base));
-		storer.store((void*)&stt.bit_width, sizeof(stt.bit_width));
+		if (stt.vector_size < config::VECTOR_NO_COMPRESS_SIZE)
+		{
+		}
+		else if(stt.vector_size < config::VECTOR_NOFILLING_SIZE)
+		{
+			storer.store((void*)&alp_bp_size, sizeof(alp_bp_size));
+		}
+		else {
+			storer.store((void*)&stt.for_base, sizeof(stt.for_base));
+			storer.store((void*)&stt.bit_width, sizeof(stt.bit_width));
+		}
+
 		storer.store((void*)alp_encoded_array, alp_bp_size);
 		if (stt.exceptions_count) {
 			storer.store((void*)exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
