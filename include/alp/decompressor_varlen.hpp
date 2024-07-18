@@ -69,19 +69,21 @@ struct AlpDecompressor_varlen {
 	}
 
 	void load_alp_vector() {
-		reader.read(&stt.exp, sizeof(stt.exp));
-		reader.read(&stt.fac, sizeof(stt.fac));
-		reader.read(&stt.exceptions_count, sizeof(stt.exceptions_count));
 		if (stt.vector_size < config::VECTOR_NO_COMPRESS_SIZE)
 		{
 			alp_bp_size = stt.vector_size * sizeof(uint64_t);
 		}
 		else if(stt.vector_size < config::VECTOR_NOFILLING_SIZE)
 		{
+			reader.read(&stt.exp, sizeof(stt.exp));
+			reader.read(&stt.fac, sizeof(stt.fac));
+			reader.read(&stt.exceptions_count, sizeof(stt.exceptions_count));
 			reader.read(&alp_bp_size, sizeof(alp_bp_size));
 		}
 		else {
-
+			reader.read(&stt.exp, sizeof(stt.exp));
+			reader.read(&stt.fac, sizeof(stt.fac));
+			reader.read(&stt.exceptions_count, sizeof(stt.exceptions_count));
 			reader.read(&stt.for_base, sizeof(stt.for_base));
 			reader.read(&stt.bit_width, sizeof(stt.bit_width));
 			alp_bp_size = AlpApiUtils<T>::get_size_after_bitpacking(stt.bit_width);
@@ -109,19 +111,20 @@ struct AlpDecompressor_varlen {
 		} else {
 			if (stt.vector_size < config::VECTOR_NO_COMPRESS_SIZE)
 			{
-				memcpy(encoded_integers, alp_encoded_array, alp_bp_size);
+				memcpy(out, alp_encoded_array, alp_bp_size);
 			}
 			else if(stt.vector_size < config::VECTOR_NOFILLING_SIZE)
 			{
 				uint32_t size;
 				turbouncompress64(reinterpret_cast<const uint8_t*>(alp_encoded_array),
 				                  reinterpret_cast<uint64_t*>(encoded_integers), size);
+				AlpDecode<T>::decode(encoded_integers, stt.fac, stt.exp, (out + out_offset));
 			}
 			else {
 				unffor::unffor(alp_encoded_array, encoded_integers, stt.bit_width, &stt.for_base);
+				AlpDecode<T>::decode(encoded_integers, stt.fac, stt.exp, (out + out_offset));
 			}
 
-			AlpDecode<T>::decode(encoded_integers, stt.fac, stt.exp, (out + out_offset));
 			AlpDecode<T>::patch_exceptions(
 			    (out + out_offset), exceptions, exceptions_position, &stt.exceptions_count);
 		}
