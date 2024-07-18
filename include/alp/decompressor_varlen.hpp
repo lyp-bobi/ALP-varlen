@@ -72,6 +72,7 @@ struct AlpDecompressor_varlen {
 		if (stt.vector_size < config::VECTOR_NO_COMPRESS_SIZE)
 		{
 			alp_bp_size = stt.vector_size * sizeof(uint64_t);
+			reader.read(alp_encoded_array, alp_bp_size);
 		}
 		else if(stt.vector_size < config::VECTOR_NOFILLING_SIZE)
 		{
@@ -79,6 +80,11 @@ struct AlpDecompressor_varlen {
 			reader.read(&stt.fac, sizeof(stt.fac));
 			reader.read(&stt.exceptions_count, sizeof(stt.exceptions_count));
 			reader.read(&alp_bp_size, sizeof(alp_bp_size));
+			reader.read(alp_encoded_array, alp_bp_size);
+			if (stt.exceptions_count > 0) {
+				reader.read(exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
+				reader.read(exceptions_position, EXCEPTION_POSITION_SIZE_BYTES * stt.exceptions_count);
+			}
 		}
 		else {
 			reader.read(&stt.exp, sizeof(stt.exp));
@@ -87,13 +93,11 @@ struct AlpDecompressor_varlen {
 			reader.read(&stt.for_base, sizeof(stt.for_base));
 			reader.read(&stt.bit_width, sizeof(stt.bit_width));
 			alp_bp_size = AlpApiUtils<T>::get_size_after_bitpacking(stt.bit_width);
-		}
-
-		reader.read(alp_encoded_array, alp_bp_size);
-
-		if (stt.exceptions_count > 0) {
-			reader.read(exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
-			reader.read(exceptions_position, EXCEPTION_POSITION_SIZE_BYTES * stt.exceptions_count);
+			reader.read(alp_encoded_array, alp_bp_size);
+			if (stt.exceptions_count > 0) {
+				reader.read(exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
+				reader.read(exceptions_position, EXCEPTION_POSITION_SIZE_BYTES * stt.exceptions_count);
+			}
 		}
 	}
 
@@ -119,14 +123,15 @@ struct AlpDecompressor_varlen {
 				turbouncompress64(reinterpret_cast<const uint8_t*>(alp_encoded_array),
 				                  reinterpret_cast<uint64_t*>(encoded_integers), size);
 				AlpDecode<T>::decode(encoded_integers, stt.fac, stt.exp, (out + out_offset));
+				AlpDecode<T>::patch_exceptions(
+				    (out + out_offset), exceptions, exceptions_position, &stt.exceptions_count);
 			}
 			else {
 				unffor::unffor(alp_encoded_array, encoded_integers, stt.bit_width, &stt.for_base);
 				AlpDecode<T>::decode(encoded_integers, stt.fac, stt.exp, (out + out_offset));
+				AlpDecode<T>::patch_exceptions(
+				    (out + out_offset), exceptions, exceptions_position, &stt.exceptions_count);
 			}
-
-			AlpDecode<T>::patch_exceptions(
-			    (out + out_offset), exceptions, exceptions_position, &stt.exceptions_count);
 		}
 	}
 

@@ -187,6 +187,7 @@ struct AlpCompressor_varlen {
 	void store_alp_vector() {
 		if (stt.vector_size < config::VECTOR_NO_COMPRESS_SIZE)
 		{
+			storer.store((void*)alp_encoded_array, alp_bp_size);
 		}
 		else if(stt.vector_size < config::VECTOR_NOFILLING_SIZE)
 		{
@@ -194,6 +195,11 @@ struct AlpCompressor_varlen {
 			storer.store((void*)&stt.fac, sizeof(stt.fac));
 			storer.store((void*)&stt.exceptions_count, sizeof(stt.exceptions_count));
 			storer.store((void*)&alp_bp_size, sizeof(alp_bp_size));
+			storer.store((void*)alp_encoded_array, alp_bp_size);
+			if (stt.exceptions_count) {
+				storer.store((void*)exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
+				storer.store((void*)exceptions_position, EXCEPTION_POSITION_SIZE_BYTES * stt.exceptions_count);
+			}
 		}
 		else {
 			storer.store((void*)&stt.exp, sizeof(stt.exp));
@@ -201,12 +207,11 @@ struct AlpCompressor_varlen {
 			storer.store((void*)&stt.exceptions_count, sizeof(stt.exceptions_count));
 			storer.store((void*)&stt.for_base, sizeof(stt.for_base));
 			storer.store((void*)&stt.bit_width, sizeof(stt.bit_width));
-		}
-
-		storer.store((void*)alp_encoded_array, alp_bp_size);
-		if (stt.exceptions_count) {
-			storer.store((void*)exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
-			storer.store((void*)exceptions_position, EXCEPTION_POSITION_SIZE_BYTES * stt.exceptions_count);
+			storer.store((void*)alp_encoded_array, alp_bp_size);
+			if (stt.exceptions_count) {
+				storer.store((void*)exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
+				storer.store((void*)exceptions_position, EXCEPTION_POSITION_SIZE_BYTES * stt.exceptions_count);
+			}
 		}
 	}
 
