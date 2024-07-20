@@ -1,12 +1,12 @@
 #ifndef ALP_DECOMPRESSOR_VARLEN_HPP
 #define ALP_DECOMPRESSOR_VARLEN_HPP
 
+#include "../../simpleffor/include/turbocompression.h"
 #include "alp/decode.hpp"
 #include "alp/storer.hpp"
 #include "alp/utils.hpp"
 #include "fastlanes/unffor.hpp"
-#include "config_varlen.hpp"
-#include "../../simpleffor/include/turbocompression.h"
+#include "helper_varlen.hpp"
 
 namespace alp {
 
@@ -28,6 +28,8 @@ struct AlpDecompressor_varlen {
 	int64_t  alp_encoded_array[config::VECTOR_SIZE];
 	uint16_t exceptions_rd[config::VECTOR_SIZE];
 	uint16_t exceptions_position[config::VECTOR_SIZE];
+
+	VECTOR_COMPRESS_TYPE store_type;
 
 	// 'right' & 'left' refer to the respective parts of the floating numbers after splitting
 	uint64_t   alp_bp_size;
@@ -68,40 +70,38 @@ struct AlpDecompressor_varlen {
 		}
 	}
 
+	void load_alp_for_vector()
+	{
+		reader.read(&stt.exp, sizeof(stt.exp));
+		reader.read(&stt.fac, sizeof(stt.fac));
+		reader.read(&stt.exceptions_count, sizeof(stt.exceptions_count));
+		reader.read(&alp_bp_size, sizeof(alp_bp_size));
+		reader.read(alp_encoded_array, alp_bp_size);
+		if (stt.exceptions_count > 0) {
+			reader.read(exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
+			reader.read(exceptions_position, EXCEPTION_POSITION_SIZE_BYTES * stt.exceptions_count);
+		}
+	}
+
 	void load_alp_vector() {
-		if (stt.vector_size < config::VECTOR_NO_COMPRESS_SIZE)
-		{
-			alp_bp_size = stt.vector_size * sizeof(uint64_t);
-			reader.read(alp_encoded_array, alp_bp_size);
-		}
-		else if(stt.vector_size < config::VECTOR_NOFILLING_SIZE)
-		{
-			reader.read(&stt.exp, sizeof(stt.exp));
-			reader.read(&stt.fac, sizeof(stt.fac));
-			reader.read(&stt.exceptions_count, sizeof(stt.exceptions_count));
-			reader.read(&alp_bp_size, sizeof(alp_bp_size));
-			reader.read(alp_encoded_array, alp_bp_size);
-			if (stt.exceptions_count > 0) {
-				reader.read(exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
-				reader.read(exceptions_position, EXCEPTION_POSITION_SIZE_BYTES * stt.exceptions_count);
-			}
-		}
-		else {
-			reader.read(&stt.exp, sizeof(stt.exp));
-			reader.read(&stt.fac, sizeof(stt.fac));
-			reader.read(&stt.exceptions_count, sizeof(stt.exceptions_count));
-			reader.read(&stt.for_base, sizeof(stt.for_base));
-			reader.read(&stt.bit_width, sizeof(stt.bit_width));
-			alp_bp_size = AlpApiUtils<T>::get_size_after_bitpacking(stt.bit_width);
-			reader.read(alp_encoded_array, alp_bp_size);
-			if (stt.exceptions_count > 0) {
-				reader.read(exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
-				reader.read(exceptions_position, EXCEPTION_POSITION_SIZE_BYTES * stt.exceptions_count);
-			}
+		reader.read(&stt.exp, sizeof(stt.exp));
+		reader.read(&stt.fac, sizeof(stt.fac));
+		reader.read(&stt.exceptions_count, sizeof(stt.exceptions_count));
+		reader.read(&stt.for_base, sizeof(stt.for_base));
+		reader.read(&stt.bit_width, sizeof(stt.bit_width));
+		alp_bp_size = AlpApiUtils<T>::get_size_after_bitpacking(stt.bit_width);
+		reader.read(alp_encoded_array, alp_bp_size);
+		if (stt.exceptions_count > 0) {
+			reader.read(exceptions, Constants<T>::EXCEPTION_SIZE_BYTES * stt.exceptions_count);
+			reader.read(exceptions_position, EXCEPTION_POSITION_SIZE_BYTES * stt.exceptions_count);
 		}
 	}
 
 	void decompress_vector(T* out) {
+		if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_RAW)
+		{
+			return;
+		}
 		if (stt.scheme == SCHEME::ALP_RD) {
 			unffor::unffor(right_parts_encoded, right_parts, stt.right_bit_width, &right_for_base);
 			unffor::unffor(left_parts_encoded, left_parts, stt.left_bit_width, &stt.left_for_base);
@@ -113,11 +113,7 @@ struct AlpDecompressor_varlen {
 			                 &stt.exceptions_count,
 			                 stt);
 		} else {
-			if (stt.vector_size < config::VECTOR_NO_COMPRESS_SIZE)
-			{
-				memcpy(out, alp_encoded_array, alp_bp_size);
-			}
-			else if(stt.vector_size < config::VECTOR_NOFILLING_SIZE)
+			if(store_type == VECTOR_COMPRESS_TYPE::COMPRESS_FOR)
 			{
 				uint32_t size;
 				turbouncompress64(reinterpret_cast<const uint8_t*>(alp_encoded_array),
@@ -126,7 +122,7 @@ struct AlpDecompressor_varlen {
 				AlpDecode<T>::patch_exceptions(
 				    (out + out_offset), exceptions, exceptions_position, &stt.exceptions_count);
 			}
-			else {
+			else if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_FASTLANE){
 				unffor::unffor(alp_encoded_array, encoded_integers, stt.bit_width, &stt.for_base);
 				AlpDecode<T>::decode(encoded_integers, stt.fac, stt.exp, (out + out_offset));
 				AlpDecode<T>::patch_exceptions(
@@ -135,11 +131,23 @@ struct AlpDecompressor_varlen {
 		}
 	}
 
-	void load_vector() {
-		if (stt.scheme == SCHEME::ALP_RD) {
-			load_alprd_vector();
-		} else {
-			load_alp_vector();
+	void load_vector(T* out) {
+		reader.read(&store_type, sizeof(store_type));
+		if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_RAW)
+		{
+			alp_bp_size = stt.vector_size * sizeof(double);
+			reader.read(out + out_offset, alp_bp_size);
+		}
+		else {
+			if (stt.scheme == SCHEME::ALP_RD) {
+				load_alprd_vector();
+			} else {
+				if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_FOR) {
+					load_alp_for_vector();
+				} else {
+					load_alp_vector();
+				}
+			}
 		}
 	}
 
@@ -172,7 +180,7 @@ struct AlpDecompressor_varlen {
 				 */
 				size_t next_vector_count = std::min(config::VECTOR_SIZE, left_to_decompress);
 				stt.vector_size = next_vector_count;
-				load_vector();
+				load_vector(out);
 				decompress_vector(out);
 				out_offset += next_vector_count;
 				left_to_decompress -= next_vector_count;
@@ -180,7 +188,7 @@ struct AlpDecompressor_varlen {
 		}
 		if (left_to_decompress) {
 			stt.vector_size = left_to_decompress;
-			load_vector();
+			load_vector(out);
 			decompress_vector(out);
 		}
 	};
