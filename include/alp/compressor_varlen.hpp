@@ -48,10 +48,24 @@ struct AlpCompressor_varlen {
 
 	size_t get_size() { return storer.get_size(); }
 
-	size_t get_compressed_max_size(int32_t ndbl)
-	{
-		size_t header_max_size = sizeof(stt.right_bit_width) + sizeof(stt.left_bit_width) + sizeof(stt.actual_dictionary_size) + config::MAX_RD_DICTIONARY_SIZE * DICTIONARY_ELEMENT_SIZE_BYTES;
-		return header_max_size + ((ndbl + config::VECTOR_SIZE - 1)/ config::VECTOR_SIZE) + ndbl* sizeof(double);
+	size_t get_compressed_max_size(int32_t ndbl) {
+		size_t header_max_size = sizeof(stt.right_bit_width) + sizeof(stt.left_bit_width) +
+		                         sizeof(stt.actual_dictionary_size) +
+		                         config::MAX_RD_DICTIONARY_SIZE * DICTIONARY_ELEMENT_SIZE_BYTES;
+		return header_max_size + ((ndbl + config::VECTOR_SIZE - 1) / config::VECTOR_SIZE) + ndbl * sizeof(double);
+	}
+
+	void reset() {
+		stt.scheme           = SCHEME::ALP;
+		stt.vector_size      = config::VECTOR_SIZE;
+		stt.exceptions_count = 0;
+		stt.sampled_values_n = 0;
+		stt.k_combinations   = 5;
+		stt.right_bit_width  = 0;
+		stt.left_bit_width   = 0;
+		stt.right_for_base   = 0;
+		stt.left_for_base    = 0;
+		storer.buffer_offset = 0;
 	}
 
 	/*
@@ -66,26 +80,26 @@ struct AlpCompressor_varlen {
 		}
 	}
 
-	void pick_store_type(){
+	void pick_store_type() {
 		if (stt.scheme == SCHEME::ALP) {
 			AlpEncode<T>::encode(
 			    input_vector, exceptions, exceptions_position, &stt.exceptions_count, encoded_integers, stt);
 			AlpEncode<T>::analyze_ffor(encoded_integers, stt.bit_width, &stt.for_base);
-			if (stt.vector_size * sizeof(double) < expected_vector_compress_size() + config::VECTOR_MINIMUM_COMPRESS_GAIN) {
+			if (stt.vector_size * sizeof(double) <
+			    expected_vector_compress_size() + config::VECTOR_MINIMUM_COMPRESS_GAIN) {
 				store_type = VECTOR_COMPRESS_TYPE::COMPRESS_RAW;
 			} else if (stt.vector_size < config::VECTOR_NOFILLING_SIZE) {
 				store_type = VECTOR_COMPRESS_TYPE::COMPRESS_FOR;
 			} else {
 				store_type = VECTOR_COMPRESS_TYPE::COMPRESS_FASTLANE;
 			}
-		}
-		else if(stt.scheme == SCHEME::ALP_RD)
-		{
+		} else if (stt.scheme == SCHEME::ALP_RD) {
 			AlpRD<T>::encode(
 			    input_vector, exceptions_rd, exceptions_position, &stt.exceptions_count, right_parts, left_parts, stt);
-			if (stt.vector_size * sizeof(double) < expected_vector_compress_size() + config::VECTOR_MINIMUM_COMPRESS_GAIN) {
+			if (stt.vector_size * sizeof(double) <
+			    expected_vector_compress_size() + config::VECTOR_MINIMUM_COMPRESS_GAIN) {
 				store_type = VECTOR_COMPRESS_TYPE::COMPRESS_RAW;
-			} else{
+			} else {
 				store_type = VECTOR_COMPRESS_TYPE::COMPRESS_FASTLANE;
 			}
 		}
@@ -94,13 +108,12 @@ struct AlpCompressor_varlen {
 	void compress_alp_vector() {
 		if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_RAW) {
 			alp_bp_size = stt.vector_size * sizeof(double);
-		}
-		else if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_FOR)
-		{
-			uint8_t *end = turbocompress64(reinterpret_cast<const uint64_t*>(encoded_integers), stt.vector_size, reinterpret_cast<uint8_t*>(alp_encoded_array));
-			alp_bp_size = end - (uint8_t *)alp_encoded_array;
-		}
-		else if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_FASTLANE){
+		} else if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_FOR) {
+			uint8_t* end = turbocompress64(reinterpret_cast<const uint64_t*>(encoded_integers),
+			                               stt.vector_size,
+			                               reinterpret_cast<uint8_t*>(alp_encoded_array));
+			alp_bp_size  = end - (uint8_t*)alp_encoded_array;
+		} else if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_FASTLANE) {
 			ffor::ffor(encoded_integers, alp_encoded_array, stt.bit_width, &stt.for_base);
 			alp_bp_size = AlpApiUtils<T>::get_size_after_bitpacking(stt.bit_width);
 		}
@@ -109,8 +122,7 @@ struct AlpCompressor_varlen {
 	void compress_rd_vector() {
 		if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_RAW) {
 			alp_bp_size = stt.vector_size * sizeof(double);
-		}
-		else if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_FASTLANE) {
+		} else if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_FASTLANE) {
 			ffor::ffor(right_parts, right_parts_encoded, stt.right_bit_width, &right_for_base);
 			ffor::ffor(left_parts, left_parts_encoded, stt.left_bit_width, &stt.left_for_base);
 		}
@@ -165,28 +177,22 @@ struct AlpCompressor_varlen {
 		}
 	};
 
-	size_t expected_vector_compress_size(){
+	size_t expected_vector_compress_size() {
 		size_t size = sizeof(store_type);
-		if (stt.scheme == SCHEME::ALP_RD)
-		{
+		if (stt.scheme == SCHEME::ALP_RD) {
 			size += sizeof(stt.exceptions_count);
 			size += left_bp_size;
 			size += right_bp_size;
 			size += stt.exceptions_count * (RD_EXCEPTION_SIZE_BYTES + RD_EXCEPTION_POSITION_SIZE_BYTES);
-		}
-		else
-		{
-			if (stt.vector_size < config::VECTOR_NOFILLING_SIZE)
-			{
+		} else {
+			if (stt.vector_size < config::VECTOR_NOFILLING_SIZE) {
 				size += sizeof(stt.exp);
 				size += sizeof(stt.fac);
 				size += sizeof(stt.exceptions_count);
 				size += sizeof(alp_bp_size);
-				size += 20 + stt.vector_size/32*32*stt.bit_width/8 + stt.vector_size%32 * sizeof(uint64_t);
+				size += 20 + stt.vector_size / 32 * 32 * stt.bit_width / 8 + stt.vector_size % 32 * sizeof(uint64_t);
 				size += stt.exceptions_count * (Constants<T>::EXCEPTION_SIZE_BYTES + EXCEPTION_POSITION_SIZE_BYTES);
-			}
-			else
-			{
+			} else {
 				size += sizeof(stt.exp);
 				size += sizeof(stt.fac);
 				size += sizeof(stt.exceptions_count);
@@ -199,9 +205,7 @@ struct AlpCompressor_varlen {
 		return size;
 	}
 
-	void store_raw_vector(){
-		storer.store((void*)input_vector, alp_bp_size);
-	}
+	void store_raw_vector() { storer.store((void*)input_vector, alp_bp_size); }
 
 	void store_rd_vector() {
 		storer.store((void*)&stt.exceptions_count, sizeof(stt.exceptions_count));
@@ -213,7 +217,7 @@ struct AlpCompressor_varlen {
 		}
 	}
 
-	void store_alp_for_vector(){
+	void store_alp_for_vector() {
 		storer.store((void*)&stt.exp, sizeof(stt.exp));
 		storer.store((void*)&stt.fac, sizeof(stt.fac));
 		storer.store((void*)&stt.exceptions_count, sizeof(stt.exceptions_count));
@@ -245,11 +249,9 @@ struct AlpCompressor_varlen {
 
 	void store_vector() {
 		storer.store((void*)&store_type, sizeof(store_type));
-		if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_RAW)
-		{
+		if (store_type == VECTOR_COMPRESS_TYPE::COMPRESS_RAW) {
 			store_raw_vector();
-		}
-		else {
+		} else {
 			if (stt.scheme == SCHEME::ALP_RD) {
 				store_rd_vector();
 			} else {
