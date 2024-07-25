@@ -63,6 +63,7 @@ struct AlpDecompressor_varlen {
 		stt.right_for_base   = 0;
 		stt.left_for_base    = 0;
 		reader.buffer_offset = 0;
+		out_offset = 0;
 	}
 
 	void load_rd_metadata() {
