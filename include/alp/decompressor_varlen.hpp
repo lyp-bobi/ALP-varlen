@@ -48,7 +48,7 @@ struct AlpDecompressor_varlen {
 
 	size_t get_size() { return reader.get_size(); }
 
-	size_t get_decompressed_max_size(int32_t ndbl) {
+	static size_t get_decompressed_max_size(int32_t ndbl) {
 		return (ndbl + config::VECTOR_SIZE - 1) / config::VECTOR_SIZE * config::VECTOR_SIZE * sizeof(double);
 	}
 

@@ -80,4 +80,4 @@ if (ALP_BUILD_BENCHMARKING)
 endif ()
 
 INSTALL(TARGETS ${CMAKE_PROJECT_NAME} LIBRARY DESTINATION lib)
-INSTALL(FILES include/alp.hpp DESTINATION include)
+INSTALL(FILES include/alp.hpp include/alp_c.h DESTINATION include)

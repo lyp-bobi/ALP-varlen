@@ -9,6 +9,7 @@
 #include "alp/utils.hpp"
 #include "fastlanes/ffor.hpp"
 #include "helper_varlen.hpp"
+#include "alp_c.h"
 
 namespace alp {
 
@@ -48,11 +49,11 @@ struct AlpCompressor_varlen {
 
 	size_t get_size() { return storer.get_size(); }
 
-	size_t get_compressed_max_size(int32_t ndbl) {
+	static size_t get_compressed_max_size(int32_t ndbl) {
 		size_t header_max_size = sizeof(stt.right_bit_width) + sizeof(stt.left_bit_width) +
 		                         sizeof(stt.actual_dictionary_size) +
 		                         config::MAX_RD_DICTIONARY_SIZE * DICTIONARY_ELEMENT_SIZE_BYTES;
-		return header_max_size + ((ndbl + config::VECTOR_SIZE - 1) / config::VECTOR_SIZE) + ndbl * sizeof(double);
+		return header_max_size + ((ndbl + config::VECTOR_SIZE - 1) / config::VECTOR_SIZE) * config::VECTOR_SIZE * sizeof(double);
 	}
 
 	void reset() {
@@ -86,9 +87,9 @@ struct AlpCompressor_varlen {
 			    input_vector, exceptions, exceptions_position, &stt.exceptions_count, encoded_integers, stt);
 			AlpEncode<T>::analyze_ffor(encoded_integers, stt.bit_width, &stt.for_base);
 			if (stt.vector_size * sizeof(double) <
-			    expected_vector_compress_size() + config::VECTOR_MINIMUM_COMPRESS_GAIN) {
+			    expected_vector_compress_size() + ALP_VECTOR_MINIMUM_COMPRESS_GAIN) {
 				store_type = VECTOR_COMPRESS_TYPE::COMPRESS_RAW;
-			} else if (stt.vector_size < config::VECTOR_NOFILLING_SIZE) {
+			} else if (stt.vector_size < ALP_VECTOR_NOFILLING_SIZE) {
 				store_type = VECTOR_COMPRESS_TYPE::COMPRESS_FOR;
 			} else {
 				store_type = VECTOR_COMPRESS_TYPE::COMPRESS_FASTLANE;
@@ -97,7 +98,7 @@ struct AlpCompressor_varlen {
 			AlpRD<T>::encode(
 			    input_vector, exceptions_rd, exceptions_position, &stt.exceptions_count, right_parts, left_parts, stt);
 			if (stt.vector_size * sizeof(double) <
-			    expected_vector_compress_size() + config::VECTOR_MINIMUM_COMPRESS_GAIN) {
+			    expected_vector_compress_size() + ALP_VECTOR_MINIMUM_COMPRESS_GAIN) {
 				store_type = VECTOR_COMPRESS_TYPE::COMPRESS_RAW;
 			} else {
 				store_type = VECTOR_COMPRESS_TYPE::COMPRESS_FASTLANE;
@@ -185,7 +186,7 @@ struct AlpCompressor_varlen {
 			size += right_bp_size;
 			size += stt.exceptions_count * (RD_EXCEPTION_SIZE_BYTES + RD_EXCEPTION_POSITION_SIZE_BYTES);
 		} else {
-			if (stt.vector_size < config::VECTOR_NOFILLING_SIZE) {
+			if (stt.vector_size < ALP_VECTOR_NOFILLING_SIZE) {
 				size += sizeof(stt.exp);
 				size += sizeof(stt.fac);
 				size += sizeof(stt.exceptions_count);

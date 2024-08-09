@@ -4,6 +4,9 @@ target_link_libraries(simple_compress PRIVATE ALP)
 add_executable(simple_compress_varlen simple_compress_varlen.cpp)
 target_link_libraries(simple_compress_varlen PRIVATE ALP)
 
+add_executable(simple_compress_varlen_c simple_compress_varlen.c)
+target_link_libraries(simple_compress_varlen_c PRIVATE ALP)
+
 add_executable(simple_compress32 simple_compress32.cpp)
 target_link_libraries(simple_compress32 PRIVATE ALP)
 
